@@ -33,6 +33,11 @@ CATCLIP_LARGE_FILE_MB="${CATCLIP_LARGE_FILE_MB:-$DEFAULT_LARGE_FILE_MB}"
 [[ ! -f "$CATCLIP_HISTORY" ]] && touch "$CATCLIP_HISTORY"
 [[ ! -f "$CATCLIP_SESSION" ]] && echo "$(date +%Y-%m-%d)" > "$CATCLIP_SESSION"
 
+# Test mode detection
+_catclip_is_test_mode() {
+    [[ "${CATCLIP_TEST_MODE:-false}" == "true" ]]
+}
+
 # Load configuration
 _catclip_load_config() {
     if [[ -f "$CATCLIP_CONFIG" ]]; then
@@ -48,6 +53,12 @@ _catclip_load_config() {
 
 # 80%: Automatic clipboard utility detection
 _catclip_detect_clipboard() {
+    # In test mode, return mock clipboard
+    if _catclip_is_test_mode; then
+        echo "test-clipboard"
+        return 0
+    fi
+    
     local start_time=$(date +%s.%N)
     
     if [[ "$CATCLIP_CLIPBOARD_CMD" != "auto" ]]; then
@@ -74,8 +85,21 @@ _catclip_detect_clipboard() {
     fi
 }
 
+# Test-safe clipboard copy function
+_test_safe_clip_copy() {
+    # In test mode, just consume input and return success
+    cat > /dev/null
+    return 0
+}
+
 # Helper function for clipboard copying operations
 _clip_copy() {
+    # Use test-safe version in test mode
+    if _catclip_is_test_mode; then
+        _test_safe_clip_copy
+        return $?
+    fi
+    
     local clipboard_util=$(_catclip_detect_clipboard)
     local start_time=$(date +%s.%N)
     
@@ -194,14 +218,18 @@ _catclip_check_file_size() {
     local threshold_mb=$(echo "$CATCLIP_LARGE_FILE_MB" | bc 2>/dev/null || echo "1")
     
     if (( $(echo "$size_mb > $threshold_mb" | bc -l 2>/dev/null || echo "0") )); then
-        if [[ "$CATCLIP_CONFIRM_LARGE" == "true" ]]; then
-            echo "⚠️  Large file detected: '$file' (${size_mb}MB)"
+        if [[ "$CATCLIP_CONFIRM_LARGE" == "true" ]] && [[ -t 0 ]]; then
+            # Only prompt if we're in an interactive terminal
+            echo "Warning: Large file detected: '$file' (${size_mb}MB)"
             echo -n "Continue copying? (y/N): "
             read -r confirm
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-                echo "📋 Operation cancelled"
+                echo " Operation cancelled"
                 return 1
             fi
+        elif [[ "$CATCLIP_CONFIRM_LARGE" == "true" ]]; then
+            # Non-interactive mode, just warn
+            echo "Warning: Large file detected: '$file' (${size_mb}MB) - copying anyway in non-interactive mode"
         fi
     fi
     
@@ -224,14 +252,30 @@ catclip() {
             echo "  --stats        Show clipboard statistics"
             echo "  --config       Show/modify configuration"
             echo ""
-            echo "Examples:"
+            echo "File Operations:"
             echo "  catclip file.txt                  # Copy single file"
             echo "  catclip *.py                      # Copy all Python files"
             echo "  catclip file1.txt file2.txt       # Copy multiple files"
+            echo "  catclipl config.json              # Copy with line numbers"
+            echo "  catclips important.txt            # Copy and show on screen"
+            echo "  catclipls script.py               # Copy with line numbers AND show"
+            echo "  catclipn script.py 15 30          # Copy specific line range"
+            echo "  catclipns code.py 10 20           # Copy line range AND show"
             echo ""
-            echo "Part of the 80-20 Human-in-the-Loop philosophy:"
-            echo "  80% - Automatic clipboard detection and file handling"
-            echo "  20% - Your conscious choices about what to copy"
+            echo "Directory Operations:"
+            echo "  pwdclip                           # Copy current directory path"
+            echo "  pwdclips                          # Copy current path AND show"
+            echo "  lsclip                            # Copy directory listing"
+            echo "  lsclip -la                        # Copy detailed directory listing"
+            echo "  lsclips                           # Copy listing AND show"
+            echo "  lsclips -la                       # Copy detailed listing AND show"
+            echo "  treeclip                          # Copy tree output"
+            echo "  treeclip -L 2                     # Copy tree with depth limit"
+            echo "  treeclips                         # Copy tree AND show"
+            echo "  treeclips -d                      # Copy directory tree AND show"
+            echo ""
+            echo "Clipboard Management:"
+            echo "  clipshow                          # Show what's in your clipboard"
             return 0
             ;;
         --insights)
@@ -260,7 +304,7 @@ catclip() {
     local file_types=()
     for file in "$@"; do
         if [ ! -f "$file" ]; then
-            echo "❌ Error: File '$file' not found"
+            echo "Error: File '$file' not found"
             return 1
         fi
         
@@ -304,9 +348,9 @@ catclip() {
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
         if [ $# -eq 1 ]; then
-            echo "✅ Contents of '$1' copied to clipboard using $clipboard_util"
+            echo " Contents of '$1' copied to clipboard using $clipboard_util"
         else
-            echo "✅ Contents of $# files copied to clipboard using $clipboard_util: $*"
+            echo " Contents of $# files copied to clipboard using $clipboard_util: $*"
         fi
         
         # 80%: Track usage analytics
@@ -318,7 +362,7 @@ catclip() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "catclip_operation" "$operation_time" "$clipboard_util"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -334,7 +378,7 @@ catclipl() {
     fi
     
     if [ ! -f "$1" ]; then
-        echo "❌ Error: File '$1' not found"
+        echo "Error: File '$1' not found"
         return 1
     fi
     
@@ -347,7 +391,7 @@ catclipl() {
     cat -n "$1" | _clip_copy
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
-        echo "✅ Contents of '$1' with line numbers copied to clipboard using $clipboard_util"
+        echo " Contents of '$1' with line numbers copied to clipboard using $clipboard_util"
         
         # Track usage
         local file_type=$(_catclip_detect_file_type "$1")
@@ -358,7 +402,7 @@ catclipl() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "catclipl_operation" "$operation_time"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -374,7 +418,7 @@ catclips() {
     fi
     
     if [ ! -f "$1" ]; then
-        echo "❌ Error: File '$1' not found"
+        echo "Error: File '$1' not found"
         return 1
     fi
     
@@ -384,11 +428,27 @@ catclips() {
         return 1
     fi
     
-    # Use tee to both display and copy
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        cat "$1"
+        cat "$1" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            echo ""
+            echo "Contents of '$1' copied to clipboard using test-clipboard"
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Use tee to both display and copy
     cat "$1" | tee >(_clip_copy >/dev/null)
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
-        echo "\n✅ Contents of '$1' copied to clipboard using $clipboard_util"
+        echo ""
+        echo "Contents of '$1' copied to clipboard using $clipboard_util"
         
         # Track usage
         local file_type=$(_catclip_detect_file_type "$1")
@@ -399,7 +459,7 @@ catclips() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "catclips_operation" "$operation_time"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -416,17 +476,17 @@ catclipn() {
     fi
     
     if [ ! -f "$1" ]; then
-        echo "❌ Error: File '$1' not found"
+        echo "Error: File '$1' not found"
         return 1
     fi
     
     if ! [[ "$2" =~ ^[0-9]+$ ]] || ! [[ "$3" =~ ^[0-9]+$ ]]; then
-        echo "❌ Error: Line numbers must be positive integers"
+        echo "Error: Line numbers must be positive integers"
         return 1
     fi
     
     if [ "$2" -gt "$3" ]; then
-        echo "❌ Error: Start line ($2) cannot be greater than end line ($3)"
+        echo "Error: Start line ($2) cannot be greater than end line ($3)"
         return 1
     fi
     
@@ -439,7 +499,7 @@ catclipn() {
     sed -n "${2},${3}p" "$1" | _clip_copy
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
-        echo "✅ Lines $2-$3 from '$1' copied to clipboard using $clipboard_util"
+        echo " Lines $2-$3 from '$1' copied to clipboard using $clipboard_util"
         
         # Track usage (partial file)
         local file_type=$(_catclip_detect_file_type "$1")
@@ -451,7 +511,7 @@ catclipn() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "catclipn_operation" "$operation_time"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -464,7 +524,7 @@ pwdclip() {
     echo "$current_path" | _clip_copy
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
-        echo "✅ Current directory path copied to clipboard using $clipboard_util: $current_path"
+        echo " Current directory path copied to clipboard using $clipboard_util: $current_path"
         
         # Track usage
         local path_length=${#current_path}
@@ -475,7 +535,7 @@ pwdclip() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "pwdclip_operation" "$operation_time"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -497,9 +557,9 @@ lsclip() {
     if [[ $result -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
         if [ $# -eq 0 ]; then
-            echo "✅ Directory listing copied to clipboard using $clipboard_util"
+            echo " Directory listing copied to clipboard using $clipboard_util"
         else
-            echo "✅ Directory listing (ls $*) copied to clipboard using $clipboard_util"
+            echo " Directory listing (ls $*) copied to clipboard using $clipboard_util"
         fi
         
         # Track usage
@@ -511,7 +571,7 @@ lsclip() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "lsclip_operation" "$operation_time"
     else
-        echo "❌ Failed to copy to clipboard"
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -520,7 +580,7 @@ lsclip() {
 clipshow() {
     local start_time=$(date +%s.%N)
     
-    echo "📋 Current clipboard contents:"
+    echo " Current clipboard contents:"
     echo "────────────────────────────────────────────────────────"
     local content=$(_clip_paste)
     if [[ $? -eq 0 ]]; then
@@ -533,10 +593,10 @@ clipshow() {
         local chars=$(echo "$content" | wc -c)
         local clipboard_util=$(_catclip_detect_clipboard)
         
-        echo "📊 Clipboard Stats:"
-        echo "   📄 Content: $lines lines, $words words, $chars characters"
-        echo "   🔧 Tool: $clipboard_util"
-        echo "   🕐 Retrieved: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "Clipboard Stats:"
+        echo "   Content: $lines lines, $words words, $chars characters"
+        echo "   Tool: $clipboard_util"
+        echo "   Retrieved: $(date '+%Y-%m-%d %H:%M:%S')"
         
         # Track usage
         _catclip_track_usage "clipshow" "1" "$chars" "clipboard_view"
@@ -546,7 +606,333 @@ clipshow() {
         local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
         _catclip_log_performance "clipshow_operation" "$operation_time"
     else
-        echo "❌ Failed to read clipboard"
+        echo "Error: Failed to read clipboard"
+        return 1
+    fi
+}
+
+# Copy tree output to clipboard
+treeclip() {
+    local start_time=$(date +%s.%N)
+    
+    if ! command -v tree >/dev/null 2>&1; then
+        echo "Error: tree command not found. Install with: sudo apt install tree"
+        return 1
+    fi
+    
+    # Run tree with any provided arguments
+    local tree_output=$(tree "$@" 2>&1)
+    local result=$?
+    
+    if [[ $result -ne 0 ]]; then
+        echo "Error: Error running tree command: $tree_output"
+        return 1
+    fi
+    
+    # Check output size
+    local output_size=${#tree_output}
+    if [[ $output_size -gt 1048576 ]]; then  # 1MB in bytes
+        if [[ "$CATCLIP_CONFIRM_LARGE" == "true" ]] && [[ -t 0 ]]; then
+            # Only prompt if we're in an interactive terminal
+            local size_mb=$(echo "scale=2; $output_size / 1024 / 1024" | bc 2>/dev/null || echo "1")
+            echo "Warning: Large tree output detected: ${size_mb}MB"
+            echo -n "Continue copying? (y/N): "
+            read -r confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                echo " Operation cancelled"
+                return 1
+            fi
+        elif [[ "$CATCLIP_CONFIRM_LARGE" == "true" ]]; then
+            # Non-interactive mode, just warn
+            local size_mb=$(echo "scale=2; $output_size / 1024 / 1024" | bc 2>/dev/null || echo "1")
+            echo "Warning: Large tree output (${size_mb}MB) - copying anyway in non-interactive mode"
+        fi
+    fi
+    
+    echo "$tree_output" | _clip_copy
+    if [[ $? -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        if [[ $# -eq 0 ]]; then
+            echo " Tree output copied to clipboard using $clipboard_util"
+        else
+            echo " Tree output (tree $*) copied to clipboard using $clipboard_util"
+        fi
+        
+        # Track usage
+        _catclip_track_usage "treeclip" "1" "$output_size" "tree"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "treeclip_operation" "$operation_time"
+    else
+        echo "Error: Failed to copy to clipboard"
+        return 1
+    fi
+}
+
+# Copy tree output to clipboard AND show on screen
+treeclips() {
+    local start_time=$(date +%s.%N)
+    
+    if ! command -v tree >/dev/null 2>&1; then
+        echo "Error: tree command not found. Install with: sudo apt install tree"
+        return 1
+    fi
+    
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        tree "$@"
+        tree "$@" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            if [[ $# -eq 0 ]]; then
+                echo "Tree output copied to clipboard using test-clipboard"
+            else
+                echo "Tree output (tree $*) copied to clipboard using test-clipboard"
+            fi
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Run tree and show output
+    tree "$@" | tee >(_clip_copy >/dev/null)
+    local result=${PIPESTATUS[0]}
+    
+    if [[ $result -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        if [[ $# -eq 0 ]]; then
+            echo "Tree output copied to clipboard using $clipboard_util"
+        else
+            echo "Tree output (tree $*) copied to clipboard using $clipboard_util"
+        fi
+        
+        # Track usage (approximate size)
+        local output_size=$(tree "$@" 2>/dev/null | wc -c)
+        _catclip_track_usage "treeclips" "1" "$output_size" "tree"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "treeclips_operation" "$operation_time"
+    else
+        echo "Error: Tree command failed"
+        return 1
+    fi
+}
+
+# Copy ls output to clipboard AND show on screen
+lsclips() {
+    local start_time=$(date +%s.%N)
+    
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        ls "$@"
+        ls "$@" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            if [[ $# -eq 0 ]]; then
+                echo "Directory listing copied to clipboard using test-clipboard"
+            else
+                echo "Directory listing (ls $*) copied to clipboard using test-clipboard"
+            fi
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Run ls and show output
+    ls "$@" | tee >(_clip_copy >/dev/null)
+    local result=${PIPESTATUS[0]}
+    
+    if [[ $result -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        if [[ $# -eq 0 ]]; then
+            echo "Directory listing copied to clipboard using $clipboard_util"
+        else
+            echo "Directory listing (ls $*) copied to clipboard using $clipboard_util"
+        fi
+        
+        # Track usage
+        local content_length=$(ls "$@" 2>/dev/null | wc -c)
+        _catclip_track_usage "lsclips" "1" "$content_length" "listing"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "lsclips_operation" "$operation_time"
+    else
+        echo "Error: Failed to copy to clipboard"
+        return 1
+    fi
+}
+
+# Copy pwd to clipboard AND show on screen
+pwdclips() {
+    local start_time=$(date +%s.%N)
+    local current_path=$(pwd)
+    
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        echo "$current_path"
+        echo "$current_path" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            echo "Current directory path copied to clipboard using test-clipboard"
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Show and copy
+    echo "$current_path" | tee >(_clip_copy >/dev/null)
+    
+    if [[ ${PIPESTATUS[1]} -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        echo "Current directory path copied to clipboard using $clipboard_util"
+        
+        # Track usage
+        local path_length=${#current_path}
+        _catclip_track_usage "pwdclips" "1" "$path_length" "path"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "pwdclips_operation" "$operation_time"
+    else
+        echo "Error: Failed to copy to clipboard"
+        return 1
+    fi
+}
+
+# Cat file with line numbers to clipboard AND show on screen
+catclipls() {
+    local start_time=$(date +%s.%N)
+    
+    if [ $# -eq 0 ]; then
+        echo "Usage: catclipls <filename>"
+        echo "  Show file contents with line numbers AND copy to clipboard"
+        return 1
+    fi
+    
+    if [ ! -f "$1" ]; then
+        echo "Error: File '$1' not found"
+        return 1
+    fi
+    
+    # Check file size
+    local file_size=$(_catclip_check_file_size "$1")
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+    
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        cat -n "$1"
+        cat -n "$1" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            echo ""
+            echo "Contents of '$1' with line numbers copied to clipboard using test-clipboard"
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Show with line numbers and copy
+    cat -n "$1" | tee >(_clip_copy >/dev/null)
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        echo ""
+        echo "Contents of '$1' with line numbers copied to clipboard using $clipboard_util"
+        
+        # Track usage
+        local file_type=$(_catclip_detect_file_type "$1")
+        _catclip_track_usage "catclipls" "1" "$file_size" "$file_type"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "catclipls_operation" "$operation_time"
+    else
+        echo "Error: Failed to copy to clipboard"
+        return 1
+    fi
+}
+
+# Cat specific line range to clipboard AND show on screen
+catclipns() {
+    local start_time=$(date +%s.%N)
+    
+    if [ $# -ne 3 ]; then
+        echo "Usage: catclipns <filename> <start_line> <end_line>"
+        echo "  Show lines from start_line to end_line AND copy to clipboard"
+        echo "  Example: catclipns myfile.py 10 20"
+        return 1
+    fi
+    
+    if [ ! -f "$1" ]; then
+        echo "Error: File '$1' not found"
+        return 1
+    fi
+    
+    if ! [[ "$2" =~ ^[0-9]+$ ]] || ! [[ "$3" =~ ^[0-9]+$ ]]; then
+        echo "Error: Line numbers must be positive integers"
+        return 1
+    fi
+    
+    if [ "$2" -gt "$3" ]; then
+        echo "Error: Start line ($2) cannot be greater than end line ($3)"
+        return 1
+    fi
+    
+    # Check total file size for analytics
+    local file_size=$(_catclip_check_file_size "$1")
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+    
+    # In test mode, use simpler approach
+    if _catclip_is_test_mode; then
+        sed -n "${2},${3}p" "$1"
+        sed -n "${2},${3}p" "$1" | _clip_copy
+        local result=$?
+        if [[ $result -eq 0 ]]; then
+            echo ""
+            echo "Lines $2-$3 from '$1' copied to clipboard using test-clipboard"
+            return 0
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+    fi
+    
+    # Normal mode: Show line range and copy
+    sed -n "${2},${3}p" "$1" | tee >(_clip_copy >/dev/null)
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+        local clipboard_util=$(_catclip_detect_clipboard)
+        echo ""
+        echo "Lines $2-$3 from '$1' copied to clipboard using $clipboard_util"
+        
+        # Track usage
+        local file_type=$(_catclip_detect_file_type "$1")
+        _catclip_track_usage "catclipns" "1" "$file_size" "$file_type"
+        
+        # Performance tracking
+        local end_time=$(date +%s.%N)
+        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+        _catclip_log_performance "catclipns_operation" "$operation_time"
+    else
+        echo "Error: Failed to copy to clipboard"
         return 1
     fi
 }
@@ -554,11 +940,11 @@ clipshow() {
 # 80%: Automatic insights generation
 _catclip_show_insights() {
     if [[ ! -f "$CATCLIP_ANALYTICS" ]] || [[ ! -s "$CATCLIP_ANALYTICS" ]]; then
-        echo "📊 No usage data available yet. Use catclip commands to generate insights!"
+        echo " No usage data available yet. Use catclip commands to generate insights!"
         return 0
     fi
     
-    echo "📊 Catclip Usage Insights - 80-20 Human-in-the-Loop Analytics"
+    echo " Catclip Usage Insights - 80-20 Human-in-the-Loop Analytics"
     echo "════════════════════════════════════════════════════════════════"
     
     local today=$(date +%Y-%m-%d)
@@ -566,13 +952,13 @@ _catclip_show_insights() {
     local today_operations=$(grep "^[^|]*|$today|" "$CATCLIP_ANALYTICS" 2>/dev/null | wc -l || echo "0")
     
     echo ""
-    echo "📋 Overall Activity:"
+    echo " Overall Activity:"
     echo "   • Total operations: $total_operations"
     echo "   • Today's operations: $today_operations"
     
     # File type analysis
     echo ""
-    echo "📁 File Types (Last 100 operations):"
+    echo " File Types (Last 100 operations):"
     if [[ -f "$CATCLIP_HISTORY" ]]; then
         tail -n 100 "$CATCLIP_HISTORY" | cut -d'|' -f5 | tr ',' '\n' | sort | uniq -c | sort -nr | head -5 | while read count type; do
             local percentage=$(echo "scale=1; $count * 100 / 100" | bc 2>/dev/null || echo "0")
@@ -582,7 +968,7 @@ _catclip_show_insights() {
     
     # Peak usage hours
     echo ""
-    echo "🕐 Peak Usage Hours (Today):"
+    echo " Peak Usage Hours (Today):"
     if [[ -f "$CATCLIP_ANALYTICS" ]]; then
         grep "^[^|]*|$today|" "$CATCLIP_ANALYTICS" 2>/dev/null | cut -d'|' -f3 | sort | uniq -c | sort -nr | head -3 | while read count hour; do
             echo "   • ${hour}:00 - ${count} operations"
@@ -592,7 +978,7 @@ _catclip_show_insights() {
     # Performance insights
     if [[ -f "${CATCLIP_ANALYTICS}.perf" ]]; then
         echo ""
-        echo "⚡ Performance Insights:"
+        echo " Performance Insights:"
         local avg_time=$(awk -F'|' '{sum+=$3; count++} END {if(count>0) printf "%.3f", sum/count; else print "0"}' "${CATCLIP_ANALYTICS}.perf" 2>/dev/null || echo "0")
         echo "   • Average operation time: ${avg_time}s"
         
@@ -601,21 +987,21 @@ _catclip_show_insights() {
     fi
     
     echo ""
-    echo "💡 80-20 Philosophy in Action:"
-    echo "   🤖 80% Computer: Automatic tracking, performance monitoring, smart detection"
-    echo "   🧠 20% Human: Your conscious choices about what files to copy and when"
+    echo "80-20 Philosophy in Action:"
+    echo "   80% Computer: Automatic tracking, performance monitoring, smart detection"
+    echo "   20% Human: Your conscious choices about what files to copy and when"
     echo ""
     echo "Use 'catclip --config' to customize your experience"
 }
 
 # Show performance and clipboard statistics
 _catclip_show_stats() {
-    echo "📈 Catclip Performance Statistics"
+    echo " Catclip Performance Statistics"
     echo "════════════════════════════════"
     
     local clipboard_util=$(_catclip_detect_clipboard)
     echo ""
-    echo "🔧 Current Configuration:"
+    echo " Current Configuration:"
     echo "   • Clipboard tool: $clipboard_util"
     echo "   • Large file threshold: ${CATCLIP_LARGE_FILE_MB}MB"
     echo "   • Usage tracking: $CATCLIP_TRACK_USAGE"
@@ -623,7 +1009,7 @@ _catclip_show_stats() {
     
     if [[ -f "${CATCLIP_ANALYTICS}.perf" ]]; then
         echo ""
-        echo "⚡ Performance Metrics:"
+        echo " Performance Metrics:"
         local operations=$(wc -l < "${CATCLIP_ANALYTICS}.perf" 2>/dev/null || echo "0")
         echo "   • Total measured operations: $operations"
         
@@ -640,7 +1026,7 @@ _catclip_show_stats() {
     
     # Current clipboard status
     echo ""
-    echo "📋 Current Clipboard Status:"
+    echo " Current Clipboard Status:"
     local content=$(_clip_paste 2>/dev/null)
     if [[ $? -eq 0 ]] && [[ -n "$content" ]]; then
         local lines=$(echo "$content" | wc -l)
@@ -654,7 +1040,7 @@ _catclip_show_stats() {
 
 # Configuration interface (20% - human control)
 _catclip_show_config() {
-    echo "⚙️  Catclip Configuration - 20% Human Control Zone"
+    echo " Catclip Configuration - 20% Human Control Zone"
     echo "═══════════════════════════════════════════════════════"
     
     _catclip_load_config
@@ -669,7 +1055,7 @@ _catclip_show_config() {
     echo "  • Clipboard stats: $CATCLIP_CLIPBOARD_STATS"
     echo ""
     
-    echo "🎛️  Want to modify settings? Edit: $CATCLIP_CONFIG"
+    echo " Want to modify settings? Edit: $CATCLIP_CONFIG"
     echo ""
     echo "Example configuration:"
     cat << 'EOF'
@@ -688,9 +1074,9 @@ CATCLIP_CLIPBOARD_STATS="true"      # Performance monitoring
 EOF
     
     echo ""
-    echo "💡 The 80-20 Philosophy:"
-    echo "   🤖 80%: Catclip handles detection, optimization, and insights automatically"
-    echo "   🧠 20%: You control what to copy, when to copy, and how it behaves"
+    echo "The 80-20 Philosophy:"
+    echo "   80%: Catclip handles detection, optimization, and insights automatically"
+    echo "   20%: You control what to copy, when to copy, and how it behaves"
 }
 
 # Initialize plugin
@@ -698,7 +1084,7 @@ _catclip_load_config
 
 # Plugin initialization message (shown once per session)
 if [[ ! -f "${CATCLIP_SESSION}.init" ]]; then
-    echo "🐱 Catclip loaded! - Cat your files, Clip your workflow"
+    echo " Catclip loaded! - Cat your files, Clip your workflow"
     echo "   Try: catclip --help | catclip --insights | catclip filename.txt"
     touch "${CATCLIP_SESSION}.init"
 fi
