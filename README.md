@@ -1,12 +1,15 @@
 # 🐱 Catclip - Smart Clipboard Utilities for Zsh
 
 ```
-    /\_/\  
-   ( o.o ) 
-    > ^ <  
+      /\_/\    📋 Cat your files,
+     ( o.o )      Clip your workflow!
+      > ^ <    
+    ┌─────────┐
+    │ ~/src $ │ 
+    │ catclip │ ────► [CLIPBOARD] ────► 📤 SHARE
+    │ *.py    │
+    └─────────┘
 ```
-
-**Cat your files, Clip your workflow** 📋✨
 
 Catclip makes working with file contents effortless by providing intelligent clipboard utilities that learn from your usage patterns. Copy files, directories, and code snippets with simple commands while gaining insights into your workflow.
 
