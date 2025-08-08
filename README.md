@@ -10,6 +10,7 @@
     │ *.py    │
     └─────────┘
 ```
+<img width="1254" height="392" alt="image" src="https://github.com/user-attachments/assets/164893b2-cf97-4250-80dc-37ee0a49ee6a" />
 
 Catclip makes working with file contents effortless by providing intelligent clipboard utilities that learn from your usage patterns. Copy files, directories, and code snippets with simple commands while gaining insights into your workflow.
 
