@@ -22,35 +22,6 @@ Catclip helps you work smarter with file contents by providing:
 - **Directory utilities**: `pwdclip`, `lsclip` for path and listing operations
 - **Workflow insights**: Learn about your clipboard usage patterns
 
-## The 80-20 Human-in-the-Loop Philosophy
-
-Catclip follows the **80-20 Human-in-the-Loop** principle that makes technology work for humans, not the other way around:
-
-### 80% Computer Help 🤖
-- **Automatic clipboard detection**: Works with xclip, xsel, or wl-copy automatically
-- **Smart file handling**: Detects file types and applies appropriate formatting
-- **Cross-platform compatibility**: Works across Linux distributions and Wayland/X11
-- **Efficient batch operations**: Handles multiple files intelligently
-- **Usage analytics**: Tracks patterns to suggest optimizations
-
-### 20% Human Control 🧠
-- **Simple, memorable commands**: Easy-to-remember command names (`catclip`, not `cc-f-to-cb`)
-- **Flexible usage patterns**: Adapt commands to your specific workflow needs
-- **Conscious decision making**: You choose what and when to copy
-- **Learning insights**: Understand your own file access patterns
-- **Customizable behavior**: Configure to match your working style
-
-This approach ensures you stay in control while technology removes the tedious parts of file manipulation.
-
-## Global Accessibility & Fair Design
-
-Catclip is designed to work everywhere for everyone:
-- **Low resource usage**: Works on older hardware and limited environments
-- **Simple English**: Clear documentation that translates well
-- **No internet required**: Core functionality works completely offline
-- **Cross-distro compatibility**: Works across different Linux distributions
-- **Cultural neutrality**: Examples work in any development context
-
 ## Getting Started
 
 ### Step 1: Install Catclip
