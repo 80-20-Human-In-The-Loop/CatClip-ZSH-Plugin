@@ -240,6 +240,13 @@ _catclip_check_file_size() {
 # Cat file contents to clipboard (supports multiple files)
 catclip() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
+    
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
+    fi
     
     # Handle special flags (20% human control)
     case "$1" in
@@ -253,26 +260,25 @@ catclip() {
             echo "  --config       Show/modify configuration"
             echo ""
             echo "File Operations:"
-            echo "  catclip file.txt                  # Copy single file"
-            echo "  catclip *.py                      # Copy all Python files"
-            echo "  catclip file1.txt file2.txt       # Copy multiple files"
-            echo "  catclipl config.json              # Copy with line numbers"
-            echo "  catclips important.txt            # Copy and show on screen"
-            echo "  catclipls script.py               # Copy with line numbers AND show"
-            echo "  catclipn script.py 15 30          # Copy specific line range"
-            echo "  catclipns code.py 10 20           # Copy line range AND show"
+            echo "  catclip file.txt                  # Show AND copy single file"
+            echo "  catclip -q file.txt               # Only copy to clipboard (quiet mode)"
+            echo "  catclip *.py                      # Show AND copy all Python files"
+            echo "  catclip file1.txt file2.txt       # Show AND copy multiple files"
+            echo "  catclipl config.json              # Show with line numbers AND copy"
+            echo "  catclipl -q config.json           # Only copy with line numbers (quiet)"
+            echo "  catclipn script.py 15 30          # Show lines 15-30 from file AND copy"
+            echo "  catclipn 15 30                    # Show lines 15-30 from clipboard AND copy"
+            echo "  catclipn -q 15 30                 # Only copy lines from clipboard (quiet)"
             echo ""
             echo "Directory Operations:"
-            echo "  pwdclip                           # Copy current directory path"
-            echo "  pwdclips                          # Copy current path AND show"
-            echo "  lsclip                            # Copy directory listing"
-            echo "  lsclip -la                        # Copy detailed directory listing"
-            echo "  lsclips                           # Copy listing AND show"
-            echo "  lsclips -la                       # Copy detailed listing AND show"
-            echo "  treeclip                          # Copy tree output"
-            echo "  treeclip -L 2                     # Copy tree with depth limit"
-            echo "  treeclips                         # Copy tree AND show"
-            echo "  treeclips -d                      # Copy directory tree AND show"
+            echo "  pwdclip                           # Show current path AND copy"
+            echo "  pwdclip -q                        # Only copy current path (quiet)"
+            echo "  lsclip                            # Show directory listing AND copy"
+            echo "  lsclip -la                        # Show detailed listing AND copy"
+            echo "  lsclip -q                         # Only copy listing (quiet)"
+            echo "  treeclip                          # Show tree AND copy"
+            echo "  treeclip -L 2                     # Show tree with depth limit AND copy"
+            echo "  treeclip -q                       # Only copy tree (quiet)"
             echo ""
             echo "Clipboard Management:"
             echo "  clipshow                          # Show what's in your clipboard"
@@ -343,6 +349,12 @@ catclip() {
         fi
     fi
     
+    # Show content unless in quiet mode
+    if [[ "$quiet_mode" == "false" ]]; then
+        echo "$content"
+        echo ""
+    fi
+    
     # Copy to clipboard
     echo "$content" | _clip_copy
     if [[ $? -eq 0 ]]; then
@@ -370,10 +382,18 @@ catclip() {
 # Cat file contents with line numbers to clipboard
 catclipl() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
+    
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
+    fi
     
     if [ $# -eq 0 ]; then
-        echo "Usage: catclipl <filename>"
-        echo "  Copy file contents with line numbers to clipboard"
+        echo "Usage: catclipl [--quiet|-q] <filename>"
+        echo "  Show file contents with line numbers AND copy to clipboard"
+        echo "  Use --quiet or -q to only copy without showing"
         return 1
     fi
     
@@ -388,7 +408,15 @@ catclipl() {
         return 1
     fi
     
-    cat -n "$1" | _clip_copy
+    local content=$(cat -n "$1")
+    
+    # Show content unless in quiet mode
+    if [[ "$quiet_mode" == "false" ]]; then
+        echo "$content"
+        echo ""
+    fi
+    
+    echo "$content" | _clip_copy
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
         echo " Contents of '$1' with line numbers copied to clipboard using $clipboard_util"
@@ -407,8 +435,9 @@ catclipl() {
     fi
 }
 
-# Cat file contents to clipboard AND show on screen
+# DEPRECATED: Use catclip instead (shows by default now)
 catclips() {
+    echo "Warning: catclips is deprecated. Use 'catclip' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     
     if [ $# -eq 0 ]; then
@@ -467,51 +496,136 @@ catclips() {
 # Cat specific line range to clipboard
 catclipn() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
     
-    if [ $# -ne 3 ]; then
-        echo "Usage: catclipn <filename> <start_line> <end_line>"
-        echo "  Copy lines from start_line to end_line to clipboard"
-        echo "  Example: catclipn myfile.py 10 20"
-        return 1
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
     fi
     
-    if [ ! -f "$1" ]; then
-        echo "Error: File '$1' not found"
-        return 1
-    fi
-    
-    if ! [[ "$2" =~ ^[0-9]+$ ]] || ! [[ "$3" =~ ^[0-9]+$ ]]; then
-        echo "Error: Line numbers must be positive integers"
-        return 1
-    fi
-    
-    if [ "$2" -gt "$3" ]; then
-        echo "Error: Start line ($2) cannot be greater than end line ($3)"
-        return 1
-    fi
-    
-    # Check total file size for analytics
-    local file_size=$(_catclip_check_file_size "$1")
-    if [[ $? -ne 0 ]]; then
-        return 1
-    fi
-    
-    sed -n "${2},${3}p" "$1" | _clip_copy
-    if [[ $? -eq 0 ]]; then
-        local clipboard_util=$(_catclip_detect_clipboard)
-        echo " Lines $2-$3 from '$1' copied to clipboard using $clipboard_util"
+    # Support both 2 and 3 parameter modes
+    if [ $# -eq 2 ]; then
+        # New behavior: use clipboard content as source
+        local start_line="$1"
+        local end_line="$2"
         
-        # Track usage (partial file)
-        local file_type=$(_catclip_detect_file_type "$1")
-        local line_count=$((3 - 2 + 1))
-        _catclip_track_usage "catclipn" "1" "$file_size" "$file_type"
+        # Validate line numbers
+        if ! [[ "$start_line" =~ ^[0-9]+$ ]] || ! [[ "$end_line" =~ ^[0-9]+$ ]]; then
+            echo "Error: Line numbers must be positive integers"
+            return 1
+        fi
         
-        # Performance tracking
-        local end_time=$(date +%s.%N)
-        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
-        _catclip_log_performance "catclipn_operation" "$operation_time"
+        if [ "$start_line" -gt "$end_line" ]; then
+            echo "Error: Start line ($start_line) cannot be greater than end line ($end_line)"
+            return 1
+        fi
+        
+        # Get clipboard content
+        local content=$(_clip_paste 2>/dev/null)
+        if [[ $? -ne 0 ]] || [[ -z "$content" ]]; then
+            echo "Error: Clipboard is empty or unreadable"
+            return 1
+        fi
+        
+        # Check if lines exist in clipboard
+        local total_lines=$(echo "$content" | wc -l)
+        if [ "$end_line" -gt "$total_lines" ]; then
+            echo "Error: Line $end_line doesn't exist (clipboard has $total_lines lines)"
+            return 1
+        fi
+        
+        # Extract lines
+        local extracted_content=$(echo "$content" | sed -n "${start_line},${end_line}p")
+        
+        # Show content unless in quiet mode
+        if [[ "$quiet_mode" == "false" ]]; then
+            echo "$extracted_content"
+            echo ""
+        fi
+        
+        # Copy to clipboard
+        echo "$extracted_content" | _clip_copy
+        if [[ $? -eq 0 ]]; then
+            local clipboard_util=$(_catclip_detect_clipboard)
+            echo " Lines $start_line-$end_line from clipboard copied back to clipboard using $clipboard_util"
+            
+            # Track usage for clipboard operation
+            local content_size=${#content}
+            _catclip_track_usage "catclipn_clipboard" "1" "$content_size" "clipboard"
+            
+            # Performance tracking
+            local end_time=$(date +%s.%N)
+            local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+            _catclip_log_performance "catclipn_clipboard_operation" "$operation_time"
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+        
+    elif [ $# -eq 3 ]; then
+        # Original behavior: use file as source
+        local filename="$1"
+        local start_line="$2"
+        local end_line="$3"
+        
+        if [ ! -f "$filename" ]; then
+            echo "Error: File '$filename' not found"
+            return 1
+        fi
+        
+        if ! [[ "$start_line" =~ ^[0-9]+$ ]] || ! [[ "$end_line" =~ ^[0-9]+$ ]]; then
+            echo "Error: Line numbers must be positive integers"
+            return 1
+        fi
+        
+        if [ "$start_line" -gt "$end_line" ]; then
+            echo "Error: Start line ($start_line) cannot be greater than end line ($end_line)"
+            return 1
+        fi
+        
+        # Check total file size for analytics
+        local file_size=$(_catclip_check_file_size "$filename")
+        if [[ $? -ne 0 ]]; then
+            return 1
+        fi
+        
+        # Extract lines from file
+        local extracted_content=$(sed -n "${start_line},${end_line}p" "$filename")
+        
+        # Show content unless in quiet mode
+        if [[ "$quiet_mode" == "false" ]]; then
+            echo "$extracted_content"
+            echo ""
+        fi
+        
+        # Copy to clipboard
+        echo "$extracted_content" | _clip_copy
+        if [[ $? -eq 0 ]]; then
+            local clipboard_util=$(_catclip_detect_clipboard)
+            echo " Lines $start_line-$end_line from '$filename' copied to clipboard using $clipboard_util"
+            
+            # Track usage (partial file)
+            local file_type=$(_catclip_detect_file_type "$filename")
+            local line_count=$((end_line - start_line + 1))
+            _catclip_track_usage "catclipn" "1" "$file_size" "$file_type"
+            
+            # Performance tracking
+            local end_time=$(date +%s.%N)
+            local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+            _catclip_log_performance "catclipn_operation" "$operation_time"
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+        
     else
-        echo "Error: Failed to copy to clipboard"
+        echo "Usage: catclipn [--quiet|-q] <start_line> <end_line>          # Use clipboard content"
+        echo "       catclipn [--quiet|-q] <filename> <start_line> <end_line> # Use file content"
+        echo ""
+        echo "Examples:"
+        echo "  catclipn 10 20           # Extract lines 10-20 from clipboard"
+        echo "  catclipn myfile.py 10 20 # Extract lines 10-20 from file"
         return 1
     fi
 }
@@ -519,7 +633,21 @@ catclipn() {
 # Copy current directory path to clipboard
 pwdclip() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
+    
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
+    fi
+    
     local current_path=$(pwd)
+    
+    # Show content unless in quiet mode
+    if [[ "$quiet_mode" == "false" ]]; then
+        echo "$current_path"
+        echo ""
+    fi
     
     echo "$current_path" | _clip_copy
     if [[ $? -eq 0 ]]; then
@@ -543,16 +671,33 @@ pwdclip() {
 # Copy directory listing to clipboard
 lsclip() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
     
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
+    fi
+    
+    # Get the listing
+    local content
     if [ $# -eq 0 ]; then
-        ls | _clip_copy
-        local result=$?
+        content=$(ls)
         local listing_type="current_dir"
     else
-        ls "$@" | _clip_copy
-        local result=$?
+        content=$(ls "$@")
         local listing_type="custom"
     fi
+    
+    # Show content unless in quiet mode
+    if [[ "$quiet_mode" == "false" ]]; then
+        echo "$content"
+        echo ""
+    fi
+    
+    # Copy to clipboard
+    echo "$content" | _clip_copy
+    local result=$?
     
     if [[ $result -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
@@ -614,6 +759,13 @@ clipshow() {
 # Copy tree output to clipboard
 treeclip() {
     local start_time=$(date +%s.%N)
+    local quiet_mode=false
+    
+    # Check for quiet flag
+    if [[ "$1" == "--quiet" ]] || [[ "$1" == "-q" ]]; then
+        quiet_mode=true
+        shift  # Remove the flag from arguments
+    fi
     
     if ! command -v tree >/dev/null 2>&1; then
         echo "Error: tree command not found. Install with: sudo apt install tree"
@@ -649,6 +801,12 @@ treeclip() {
         fi
     fi
     
+    # Show content unless in quiet mode
+    if [[ "$quiet_mode" == "false" ]]; then
+        echo "$tree_output"
+        echo ""
+    fi
+    
     echo "$tree_output" | _clip_copy
     if [[ $? -eq 0 ]]; then
         local clipboard_util=$(_catclip_detect_clipboard)
@@ -671,8 +829,9 @@ treeclip() {
     fi
 }
 
-# Copy tree output to clipboard AND show on screen
+# DEPRECATED: Use treeclip instead (shows by default now)
 treeclips() {
+    echo "Warning: treeclips is deprecated. Use 'treeclip' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     
     if ! command -v tree >/dev/null 2>&1; then
@@ -724,8 +883,9 @@ treeclips() {
     fi
 }
 
-# Copy ls output to clipboard AND show on screen
+# DEPRECATED: Use lsclip instead (shows by default now)
 lsclips() {
+    echo "Warning: lsclips is deprecated. Use 'lsclip' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     
     # In test mode, use simpler approach
@@ -772,8 +932,9 @@ lsclips() {
     fi
 }
 
-# Copy pwd to clipboard AND show on screen
+# DEPRECATED: Use pwdclip instead (shows by default now)
 pwdclips() {
+    echo "Warning: pwdclips is deprecated. Use 'pwdclip' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     local current_path=$(pwd)
     
@@ -812,8 +973,9 @@ pwdclips() {
     fi
 }
 
-# Cat file with line numbers to clipboard AND show on screen
+# DEPRECATED: Use catclipl instead (shows by default now)
 catclipls() {
+    echo "Warning: catclipls is deprecated. Use 'catclipl' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     
     if [ $# -eq 0 ]; then
@@ -869,70 +1031,149 @@ catclipls() {
     fi
 }
 
-# Cat specific line range to clipboard AND show on screen
+# DEPRECATED: Use catclipn instead (shows by default now)
 catclipns() {
+    echo "Warning: catclipns is deprecated. Use 'catclipn' instead (shows by default now)" >&2
     local start_time=$(date +%s.%N)
     
-    if [ $# -ne 3 ]; then
-        echo "Usage: catclipns <filename> <start_line> <end_line>"
-        echo "  Show lines from start_line to end_line AND copy to clipboard"
-        echo "  Example: catclipns myfile.py 10 20"
-        return 1
-    fi
-    
-    if [ ! -f "$1" ]; then
-        echo "Error: File '$1' not found"
-        return 1
-    fi
-    
-    if ! [[ "$2" =~ ^[0-9]+$ ]] || ! [[ "$3" =~ ^[0-9]+$ ]]; then
-        echo "Error: Line numbers must be positive integers"
-        return 1
-    fi
-    
-    if [ "$2" -gt "$3" ]; then
-        echo "Error: Start line ($2) cannot be greater than end line ($3)"
-        return 1
-    fi
-    
-    # Check total file size for analytics
-    local file_size=$(_catclip_check_file_size "$1")
-    if [[ $? -ne 0 ]]; then
-        return 1
-    fi
-    
-    # In test mode, use simpler approach
-    if _catclip_is_test_mode; then
-        sed -n "${2},${3}p" "$1"
-        sed -n "${2},${3}p" "$1" | _clip_copy
-        local result=$?
-        if [[ $result -eq 0 ]]; then
+    # Support both 2 and 3 parameter modes
+    if [ $# -eq 2 ]; then
+        # New behavior: use clipboard content as source
+        local start_line="$1"
+        local end_line="$2"
+        
+        # Validate line numbers
+        if ! [[ "$start_line" =~ ^[0-9]+$ ]] || ! [[ "$end_line" =~ ^[0-9]+$ ]]; then
+            echo "Error: Line numbers must be positive integers"
+            return 1
+        fi
+        
+        if [ "$start_line" -gt "$end_line" ]; then
+            echo "Error: Start line ($start_line) cannot be greater than end line ($end_line)"
+            return 1
+        fi
+        
+        # Get clipboard content
+        local content=$(_clip_paste 2>/dev/null)
+        if [[ $? -ne 0 ]] || [[ -z "$content" ]]; then
+            echo "Error: Clipboard is empty or unreadable"
+            return 1
+        fi
+        
+        # Check if lines exist in clipboard
+        local total_lines=$(echo "$content" | wc -l)
+        if [ "$end_line" -gt "$total_lines" ]; then
+            echo "Error: Line $end_line doesn't exist (clipboard has $total_lines lines)"
+            return 1
+        fi
+        
+        # Extract lines, show them, and copy back to clipboard
+        local extracted_content=$(echo "$content" | sed -n "${start_line},${end_line}p")
+        
+        # In test mode, use simpler approach
+        if _catclip_is_test_mode; then
+            echo "$extracted_content"
+            echo "$extracted_content" | _clip_copy
+            local result=$?
+            if [[ $result -eq 0 ]]; then
+                echo ""
+                echo "Lines $start_line-$end_line from clipboard copied back to clipboard using test-clipboard"
+                return 0
+            else
+                echo "Error: Failed to copy to clipboard"
+                return 1
+            fi
+        fi
+        
+        # Normal mode: Show and copy
+        echo "$extracted_content" | tee >(_clip_copy >/dev/null)
+        if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+            local clipboard_util=$(_catclip_detect_clipboard)
             echo ""
-            echo "Lines $2-$3 from '$1' copied to clipboard using test-clipboard"
-            return 0
+            echo "Lines $start_line-$end_line from clipboard copied back to clipboard using $clipboard_util"
+            
+            # Track usage for clipboard operation
+            local content_size=${#content}
+            _catclip_track_usage "catclipns_clipboard" "1" "$content_size" "clipboard"
+            
+            # Performance tracking
+            local end_time=$(date +%s.%N)
+            local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+            _catclip_log_performance "catclipns_clipboard_operation" "$operation_time"
         else
             echo "Error: Failed to copy to clipboard"
             return 1
         fi
-    fi
-    
-    # Normal mode: Show line range and copy
-    sed -n "${2},${3}p" "$1" | tee >(_clip_copy >/dev/null)
-    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
-        local clipboard_util=$(_catclip_detect_clipboard)
-        echo ""
-        echo "Lines $2-$3 from '$1' copied to clipboard using $clipboard_util"
         
-        # Track usage
-        local file_type=$(_catclip_detect_file_type "$1")
-        _catclip_track_usage "catclipns" "1" "$file_size" "$file_type"
+    elif [ $# -eq 3 ]; then
+        # Original behavior: use file as source
+        local filename="$1"
+        local start_line="$2"
+        local end_line="$3"
         
-        # Performance tracking
-        local end_time=$(date +%s.%N)
-        local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
-        _catclip_log_performance "catclipns_operation" "$operation_time"
+        if [ ! -f "$filename" ]; then
+            echo "Error: File '$filename' not found"
+            return 1
+        fi
+        
+        if ! [[ "$start_line" =~ ^[0-9]+$ ]] || ! [[ "$end_line" =~ ^[0-9]+$ ]]; then
+            echo "Error: Line numbers must be positive integers"
+            return 1
+        fi
+        
+        if [ "$start_line" -gt "$end_line" ]; then
+            echo "Error: Start line ($start_line) cannot be greater than end line ($end_line)"
+            return 1
+        fi
+        
+        # Check total file size for analytics
+        local file_size=$(_catclip_check_file_size "$filename")
+        if [[ $? -ne 0 ]]; then
+            return 1
+        fi
+        
+        # In test mode, use simpler approach
+        if _catclip_is_test_mode; then
+            sed -n "${start_line},${end_line}p" "$filename"
+            sed -n "${start_line},${end_line}p" "$filename" | _clip_copy
+            local result=$?
+            if [[ $result -eq 0 ]]; then
+                echo ""
+                echo "Lines $start_line-$end_line from '$filename' copied to clipboard using test-clipboard"
+                return 0
+            else
+                echo "Error: Failed to copy to clipboard"
+                return 1
+            fi
+        fi
+        
+        # Normal mode: Show line range and copy
+        sed -n "${start_line},${end_line}p" "$filename" | tee >(_clip_copy >/dev/null)
+        if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+            local clipboard_util=$(_catclip_detect_clipboard)
+            echo ""
+            echo "Lines $start_line-$end_line from '$filename' copied to clipboard using $clipboard_util"
+            
+            # Track usage
+            local file_type=$(_catclip_detect_file_type "$filename")
+            _catclip_track_usage "catclipns" "1" "$file_size" "$file_type"
+            
+            # Performance tracking
+            local end_time=$(date +%s.%N)
+            local operation_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+            _catclip_log_performance "catclipns_operation" "$operation_time"
+        else
+            echo "Error: Failed to copy to clipboard"
+            return 1
+        fi
+        
     else
-        echo "Error: Failed to copy to clipboard"
+        echo "Usage: catclipns <start_line> <end_line>           # Use clipboard content"
+        echo "       catclipns <filename> <start_line> <end_line> # Use file content"
+        echo ""
+        echo "Examples:"
+        echo "  catclipns 10 20           # Show & copy lines 10-20 from clipboard"
+        echo "  catclipns myfile.py 10 20 # Show & copy lines 10-20 from file"
         return 1
     fi
 }

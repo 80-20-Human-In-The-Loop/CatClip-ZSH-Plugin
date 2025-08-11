@@ -17,10 +17,11 @@ Catclip makes working with file contents effortless by providing intelligent cli
 ## What Catclip Does
 
 Catclip helps you work smarter with file contents by providing:
-- **Smart file copying**: `catclip file.txt` copies content directly to clipboard
-- **Line-specific copying**: `catclipn file.py 10 20` copies specific line ranges
-- **Multi-file support**: `catclip *.js` copies multiple files with separators
-- **Directory utilities**: `pwdclip`, `lsclip` for path and listing operations
+- **Smart file copying**: `catclip file.txt` shows content AND copies to clipboard
+- **Line-specific copying**: `catclipn file.py 10 20` shows lines 10-20 AND copies them
+- **Quiet mode**: Add `-q` or `--quiet` to any command to only copy without showing
+- **Multi-file support**: `catclip *.js` shows and copies multiple files with separators
+- **Directory utilities**: `pwdclip`, `lsclip` show info AND copy to clipboard
 - **Workflow insights**: Learn about your clipboard usage patterns
 
 ## 🔥 The Core Workflow: Browse → Identify → Extract
@@ -34,8 +35,9 @@ Catclip helps you work smarter with file contents by providing:
 catclipls config.yaml
 
 # Step 2: Identify the exact lines you need (e.g., lines 45-67)
-# Step 3: Extract just those lines to clipboard
-catclipns config.yaml 45 67
+# Step 3: Extract just those lines to clipboard (shows AND copies)
+catclipn config.yaml 45 67
+# Or from clipboard: catclipn 45 67
 ```
 
 **That's it!** You've just copied exactly what you needed without touching your mouse, opening an editor, or breaking your terminal flow.
@@ -47,7 +49,7 @@ catclipns config.yaml 45 67
 # Browse the error log
 catclipls error.log
 # Found the stack trace at lines 234-289?
-catclipns error.log 234 289
+catclipn error.log 234 289  # Shows AND copies
 # Now paste it directly into your bug report!
 ```
 
@@ -56,7 +58,7 @@ catclipns error.log 234 289
 # Review nginx config
 catclipls /etc/nginx/nginx.conf
 # Need just the SSL section (lines 80-95)?
-catclipns /etc/nginx/nginx.conf 80 95
+catclipn /etc/nginx/nginx.conf 80 95  # Shows AND copies
 # Paste it into your new server config!
 ```
 
@@ -65,7 +67,7 @@ catclipns /etc/nginx/nginx.conf 80 95
 # Browse a Python file
 catclipls utils.py
 # Found that perfect function at lines 156-184?
-catclipns utils.py 156 184
+catclipn utils.py 156 184  # Shows AND copies
 # Paste it into your new script!
 ```
 
@@ -73,13 +75,13 @@ catclipns utils.py 156 184
 ```bash
 # Browse multiple files and extract the best parts
 catclipls old_script.sh      # Find the initialization (lines 1-25)
-catclipns old_script.sh 1 25  # Copy it
+catclipn old_script.sh 1 25  # Show AND copy it
 
-catclipls lib/functions.sh    # Find the validation function (lines 89-120)
-catclipns lib/functions.sh 89 120  # Copy it
+catclipl lib/functions.sh    # Find the validation function (lines 89-120)
+catclipn lib/functions.sh 89 120  # Show AND copy it
 
-catclipls deploy.sh           # Find the cleanup section (lines 200-215)
-catclipns deploy.sh 200 215   # Copy it
+catclipl deploy.sh           # Find the cleanup section (lines 200-215)
+catclipn deploy.sh 200 215   # Show AND copy it
 # You've just assembled a new script from the best parts of existing ones!
 ```
 
@@ -138,36 +140,40 @@ source ~/.zshrc
 After installation, Catclip works immediately:
 
 ```bash
-# Copy a file's contents
+# Show and copy a file's contents (NEW: shows by default!)
 catclip README.md
 
-# Copy with line numbers
+# Only copy without showing (quiet mode)
+catclip -q README.md
+
+# Show with line numbers AND copy
 catclipl config.json
 
-# Copy specific lines
+# Show and copy specific lines from file
 catclipn script.py 15 30
 
-# Copy and show on screen
-catclips important.txt
+# Show and copy lines from clipboard content
+catclipn 15 30
 
-# Copy with line numbers AND show
-catclipls config.py
-
-# Copy tree structure
+# Show tree structure AND copy
 treeclip -L 2
 
-# Copy AND show directory listing
-lsclips -la
+# Show directory listing AND copy
+lsclip -la
 ```
 
 ### Step 3: Explore Advanced Features
 
 ```bash
-# Copy current directory path
+# Show current directory path AND copy
 pwdclip
 
-# Copy directory listing
+# Show directory listing AND copy
 lsclip
+
+# Only copy without showing (quiet mode)
+pwdclip -q
+lsclip -q
 
 # Show what's in your clipboard
 clipshow
@@ -178,23 +184,24 @@ clipshow
 ### Basic File Operations
 
 ```bash
-catclip <file>           # Copy file contents to clipboard
-catclipl <file>          # Copy with line numbers
-catclips <file>          # Copy and display on screen
-catclipls <file>         # Copy with line numbers AND show
-catclipn <file> <start> <end>  # Copy specific line range
-catclipns <file> <start> <end> # Copy line range AND show
+catclip <file>           # Show file contents AND copy to clipboard
+catclip -q <file>        # Only copy to clipboard (quiet mode)
+catclipl <file>          # Show with line numbers AND copy
+catclipl -q <file>       # Only copy with line numbers (quiet)
+catclipn <file> <start> <end>  # Show specific lines AND copy
+catclipn <start> <end>         # Show lines from clipboard AND copy
+catclipn -q <start> <end>      # Only copy lines (quiet)
 ```
 
 ### Directory Operations
 
 ```bash
-pwdclip                  # Copy current directory path
-pwdclips                 # Copy current path AND show
-lsclip [options]         # Copy directory listing
-lsclips [options]        # Copy listing AND show
-treeclip [options]       # Copy tree output
-treeclips [options]      # Copy tree AND show
+pwdclip                  # Show current path AND copy
+pwdclip -q               # Only copy current path (quiet)
+lsclip [options]         # Show directory listing AND copy
+lsclip -q [options]      # Only copy listing (quiet)
+treeclip [options]       # Show tree output AND copy
+treeclip -q [options]    # Only copy tree (quiet)
 clipshow                 # Display clipboard contents with stats
 ```
 
